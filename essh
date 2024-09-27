@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+
+# The purpose of ESSH is to be a simple SSH wrapper that allows other command tasks to be done from the same tool.
+
+APP="essh"
+SUBCOMMAND=$1
+
+if [ -z "$SUBCOMMAND" ]; then
+  echo "Usage: $APP <subcommand>"
+  exit 1
+fi
+
+# Helpers
+function show_config() {
+  local data=$(cat ~/.ssh/config)
+
+  # Parse into a list of hosts
+  local hosts=$(echo "$data" | grep -E "Host\s" | sed -E "s/Host\s//g")
+
+  # Print out the hosts
+  for host in $hosts; do
+    # Search
+    if [ -n "$1" ]; then
+      if [[ "$host" != *"$1"* ]]; then
+        continue
+      fi
+    fi
+    echo "$host"
+  done
+}
+
+function select_host() {
+  local hosts=$(show_config "$1")
+
+  if [ -z "$hosts" ]; then
+    echo "No hosts found."
+    exit 1
+  fi
+  
+  which fzf > /dev/null
+  if [ $? -ne 0 ]; then
+    echo "fzf is required for this command. Install it with 'sudo apt install fzf'"
+    exit 1
+  fi
+  local host=$(echo "$hosts" | fzf -1 | xargs)
+  if [ -z "$host" ]; then
+    exit 1
+  fi
+  echo "Selected host: $host"
+  ssh "$host"
+}
+
+function add_host() {
+  local host="$1"
+  local address=""
+  local user=""
+  local port=""
+  
+  if [ -z "$host" ]; then
+    read -p "Enter the hostname for identifying: " host
+  fi
+
+  read -p "Enter the host address for $host: " address
+  
+  # If the address contains an @, then split it into user and address
+  if [[ "$address" == *"@"* ]]; then
+    user=$(echo "$address" | cut -d@ -f1)
+    address=$(echo "$address" | cut -d@ -f2)
+  fi
+  
+  if [ -z "$user" ]; then
+    read -p "Enter the user name (Empty or <user> for current user): " user
+  fi
+
+  # If the address contains a :, then split it into address and port
+  if [[ "$address" == *":"* ]]; then
+    port=$(echo "$address" | cut -d: -f2)
+    address=$(echo "$address" | cut -d: -f1)
+  fi
+
+  if [ -z "$port" ]; then
+    read -p "Enter the port number (Empty for '22'): " port
+  fi
+
+  if [ -z "$user" ]; then
+    user="<user>"
+  fi
+
+  if [ -z "$port" ]; then
+    port=22
+  fi
+
+  cfg=~/.ssh/config
+
+  echo "Host $host" >> $cfg
+  echo "HostName $address" >> $cfg
+  if [ "$user" != "<user>" ]; then
+    echo "User $user" >> $cfg
+  fi
+  echo "Port $port" >> $cfg
+
+  echo "Host added successfully."
+
+}
+
+function remove_host() {
+  local host=$1
+  if [ -z "$host" ]; then
+    echo "Usage: $APP remove <host>"
+    exit 1
+  fi
+  # Find the host in the config file
+  local data=$(cat ~/.ssh/config)
+  local index=$(echo "$data" | grep -n -E "Host\s$host" | cut -d: -f1)
+  if [ -z "$index" ]; then
+    echo "Host not found."
+    exit 1
+  fi
+
+  # Find the next host
+  local next_index=$(echo "$data" | grep -n -E "Host\s" | grep -A 1 -E "^$index" | tail -n 1 | cut -d: -f1)
+  if [[ -z "$next_index" || "$next_index" -eq "$index" ]]; then
+    next_index=$(($(echo "$data" | wc -l) + 1))
+  fi
+
+  # Remove the host
+  sed -i "$index,$((next_index - 1)) d" ~/.ssh/config
+  echo "Host removed successfully."
+}
+
+function backward_port() {
+  local host=$1
+  
+  local _port=$2
+  local local_port="$_port"
+  local remote_port="$_port"
+
+  if [[ "$_port" == *":"* ]]; then
+    remote_port=$(echo "$_port" | cut -d: -f1)
+    local_port=$(echo "$_port" | cut -d: -f2)
+  fi
+  local remote_host=$3
+  
+  if [ -z "$local_port" ]; then
+    echo "Usage: $APP backward <host> <local_port> [remote_port] [remote_host]"
+    exit 1
+  fi
+
+  if [ -z "$remote_port" ]; then
+    remote_port="$local_port"
+  fi
+
+  if [ -z "$remote_host" ]; then
+    remote_host="localhost"
+  fi
+
+  echo "Forwarding Remote $remote_host:$remote_port to $local_port"
+
+  ssh -L "$local_port:$remote_host:$remote_port" "$host"
+}
+
+function forward_port() {
+  local host=$1
+  
+  local _port=$2
+  local remote_port="$_port"
+  local local_port="$_port"
+
+  if [[ "$_port" == *":"* ]]; then
+    remote_port=$(echo "$_port" | cut -d: -f1)
+    local_port=$(echo "$_port" | cut -d: -f2)
+  fi
+  local local_host=$3
+  
+  if [ -z "$remote_port" ]; then
+    echo "Usage: $APP forward <host> <remote_port> [local_port] [local_host]"
+    exit 1
+  fi
+
+  if [ -z "$local_port" ]; then
+    local_port="$remote_port"
+  fi
+
+  if [ -z "$local_host" ]; then
+    local_host="localhost"
+  fi
+
+  echo "Forwarding Local $local_host:$local_port to $remote_port"
+
+  ssh -R "$remote_port:$local_host:$local_port" "$host"
+}
+
+# Handle commands
+case $SUBCOMMAND in
+"ssh" | "connect" | "c")
+  shift
+  ssh "$@"
+  ;;
+"scp" | "copy" | "cp")
+  shift
+  scp "$@"
+  ;;
+"rsync" | "sync")
+  shift
+  rsync "$@"
+  ;;
+"forward" | "fw")
+  shift
+  forward_port "$@"
+  ;;
+"backward" | "bw")
+  shift
+  backward_port "$@"
+  ;;
+"config" | "cfg")
+  shift
+  sensible-editor ~/.ssh/config
+  ;;
+"list" | "ls")
+  shift
+  show_config "$@"
+  ;;
+"select" | "sel" | "s")
+  shift
+  select_host "$@"
+  ;;
+"add" | "a")
+  shift
+  add_host "$@"
+  ;;
+"remove" | "rm")
+  shift
+  remove_host "$@"
+  ;;
+*)
+  echo "Unknown subcommand: $SUBCOMMAND"
+  exit 1
+  ;;
+esac
