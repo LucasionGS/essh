@@ -11,7 +11,9 @@ author: "Lucasion"
 #Platform can be "linux_x64", "windows", or "any".
 dist:
   linux_x64: "."
+  linux_arm64: "."
 # Binary files that should be executable after installation. Relative to the dist directory.
 # Can be a list of strings (for any), or a map of platform to a list of strings. Platform can be "linux", "windows", or "any".
 bin:
   linux_x64: ["essh"]
+  linux_arm64: ["essh"]
