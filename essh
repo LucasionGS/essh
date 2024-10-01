@@ -38,8 +38,9 @@ function select_host() {
     exit 1
   fi
   
-  # Add "+ New Host" to the list
-  hosts=$(echo -e "+ New Host\n$hosts")
+  # Add "+ New Host" to the list starts the list
+  # hosts=$(echo -e "+ New Host\n$hosts")
+  hosts=$(echo -e "$hosts\n+ New Host")
 
   local host=$(echo "$hosts" | fzf -1 | xargs)
   if [ -z "$host" ]; then
