@@ -58,6 +58,7 @@ function select_host() {
   
   echo "Selected host: $host"
   ssh "$host"
+  echo "Session shut down: $host"
 }
 
 function add_host() {
