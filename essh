@@ -5,11 +5,6 @@
 APP="essh"
 SUBCOMMAND=$1
 
-if [ -z "$SUBCOMMAND" ]; then
-  echo "Usage: $APP <subcommand>"
-  exit 1
-fi
-
 # Helpers
 function show_config() {
   local data=$(cat ~/.ssh/config)
@@ -203,6 +198,12 @@ function forward_port() {
 
   ssh -R "$remote_port:$local_host:$local_port" "$host"
 }
+
+if [ -z "$SUBCOMMAND" ]; then
+  # Default to selecting a host
+  select_host "$@"
+  exit 1
+fi
 
 # Handle commands
 case $SUBCOMMAND in
