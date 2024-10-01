@@ -42,10 +42,24 @@ function select_host() {
     echo "fzf is required for this command. Install it with 'sudo apt install fzf'"
     exit 1
   fi
+  
+  # Add "+ New Host" to the list
+  hosts=$(echo -e "+ New Host\n$hosts")
+
   local host=$(echo "$hosts" | fzf -1 | xargs)
   if [ -z "$host" ]; then
     exit 1
   fi
+
+  if [ "$host" == "+ New Host" ]; then
+    add_host
+
+    # Re-run the select command
+    select_host
+
+    exit 0
+  fi
+  
   echo "Selected host: $host"
   ssh "$host"
 }
