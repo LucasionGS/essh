@@ -66,6 +66,7 @@ function add_host() {
   local address=""
   local user=""
   local port=""
+  local jump_host=""
   
   if [ -z "$host" ]; then
     read -p "Enter the hostname for identifying: " host
@@ -93,6 +94,9 @@ function add_host() {
     read -p "Enter the port number (Empty for '22'): " port
   fi
 
+  # Ask for jump host configuration
+  read -p "Enter jump host (Empty for none): " jump_host
+
   if [ -z "$user" ]; then
     user="<user>"
   fi
@@ -109,6 +113,9 @@ function add_host() {
     echo "User $user" >> $cfg
   fi
   echo "Port $port" >> $cfg
+  if [ -n "$jump_host" ]; then
+    echo "ProxyJump $jump_host" >> $cfg
+  fi
 
   echo "Host added successfully."
 
@@ -201,6 +208,40 @@ function forward_port() {
   ssh -R "$remote_port:$local_host:$local_port" "$host"
 }
 
+function jump_connect() {
+  local jump_host=$1
+  local target_host=$2
+  
+  if [ -z "$jump_host" ] || [ -z "$target_host" ]; then
+    echo "Usage: $APP jump <jump-host> <target-host>"
+    echo "Connect to target-host through jump-host as a jump server"
+    exit 1
+  fi
+  
+  echo "Connecting to $target_host via jump server $jump_host"
+  ssh -J "$jump_host" "$target_host"
+}
+
+function show_help() {
+  echo "Usage: $APP [COMMAND] [ARGS...]"
+  echo ""
+  echo "COMMANDS:"
+  echo "  ssh|connect|c <host>                Connect to host via SSH"
+  echo "  scp|copy|cp <args>                  Copy files using SCP"
+  echo "  rsync|sync <args>                   Sync files using rsync"
+  echo "  jump|j <jump-host> <target-host>    Connect to target via jump server"
+  echo "  forward|fw <host> <port> [local_port] [local_host]    Forward port"
+  echo "  backward|bw <host> <local_port> [remote_port] [remote_host]    Reverse forward"
+  echo "  config|cfg                          Edit SSH config"
+  echo "  list|ls [pattern]                   List configured hosts"
+  echo "  select|sel|s [pattern]              Interactively select and connect to host"
+  echo "  add|a [hostname]                    Add new host to config"
+  echo "  remove|rm <hostname>                Remove host from config"
+  echo "  help|h                              Show this help message"
+  echo ""
+  echo "If no command is provided, interactive host selection is started."
+}
+
 if [ -z "$SUBCOMMAND" ]; then
   # Default to selecting a host
   select_host "$@"
@@ -229,6 +270,10 @@ case $SUBCOMMAND in
   shift
   backward_port "$@"
   ;;
+"jump" | "j")
+  shift
+  jump_connect "$@"
+  ;;
 "config" | "cfg")
   shift
   sensible-editor ~/.ssh/config
@@ -249,8 +294,12 @@ case $SUBCOMMAND in
   shift
   remove_host "$@"
   ;;
+"help" | "h")
+  show_help
+  ;;
 *)
   echo "Unknown subcommand: $SUBCOMMAND"
+  echo "Use '$APP help' for available commands"
   exit 1
   ;;
 esac
